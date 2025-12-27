@@ -1,0 +1,31 @@
+# service.yaml
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: service-extractor-coin-data
+spec:
+  template:
+    metadata:
+      annotations:
+        # Use the connection name of your instance
+        run.googleapis.com/cloudsql-instances: "dulcet-iterator-344116:us-central1:de-course-dev"
+    spec:
+      containers:
+        - image: us-central1-docker.pkg.dev/dulcet-iterator-344116/cloud-run-source-deploy/service-extractor-coin-data:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: BUCKET_NAME
+              value: "thomasanalytics-data1"
+            - name: PATH_PREFIX
+              value: "lake/coins/usd_market_cap_desc"
+            - name: DB_USER
+              value: "admin-1"
+            - name: DB_HOST
+              value: "/cloudsql/dulcet-iterator-344116:us-central1:de-course-dev"
+            - name: DB_PORT
+              value: "3306"
+            - name: DB_NAME
+              value: "core"
+      serviceAccountName: 619238021876-compute@developer.gserviceaccount.com
+
