@@ -1,0 +1,31 @@
+# job.yaml
+apiVersion: run.googleapis.com/v1
+kind: Job
+metadata:
+  name: job-extractor-nhc-gtwo
+spec:
+  template:
+    spec:
+      taskCount: 1
+      template:
+        spec:
+          containers:
+            - image: us-central1-docker.pkg.dev/dulcet-iterator-344116/cloud-run-source-deploy/job-extractor-nhc-gtwo-v1:latest
+              env:
+                - name: BUCKET_NAME
+                  value: "thomasanalytics-data1"
+                - name: PATH_PREFIX
+                  value: "lake/news/national_hurricane_center/graphical_tropical_weather_outlooks"
+                - name: URL_NHC_GTWO
+                  value: "https://www.nhc.noaa.gov/gtwo.xml"
+                - name: DB_USER
+                  value: "admin-1"
+                - name: DB_HOST
+                  value: "/cloudsql/dulcet-iterator-344116:us-central1:de-course-dev"
+                - name: DB_PORT
+                  value: "3306"
+                - name: DB_NAME
+                  value: "core"
+          timeoutSeconds: 600
+          serviceAccountName: 619238021876-compute@developer.gserviceaccount.com
+
