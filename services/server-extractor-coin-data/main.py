@@ -126,11 +126,31 @@ def close_db_connection():
 
 def get_coins():
     """Fetch top N cryptocurrencies by market cap"""
-    return requests.get("https://api.coingecko.com/api/v3/coins/markets", 
-                       params={"vs_currency": "usd", "order": "market_cap_desc", 
-                              "per_page": 100, "page": 1, "sparkline": False,
-                              "price_change_percentage": "1h,24h,7d,30d"}, 
-                       timeout=10).json()
+    response = requests.get("https://api.coingecko.com/api/v3/coins/markets", 
+                           params={"vs_currency": "usd", "order": "market_cap_desc", 
+                                  "per_page": 100, "page": 1, "sparkline": False,
+                                  "price_change_percentage": "1h,24h,7d,30d"}, 
+                           timeout=10)
+    
+    # Check HTTP status code
+    response.raise_for_status()
+    
+    # Parse JSON response
+    data = response.json()
+    
+    # Check for API error responses (e.g., rate limit errors)
+    if isinstance(data, dict) and "status" in data:
+        status = data.get("status", {})
+        if isinstance(status, dict) and "error_code" in status:
+            error_code = status.get("error_code")
+            error_message = status.get("error_message", "Unknown error")
+            raise ValueError(f"CoinGecko API error: {error_code} - {error_message}")
+    
+    # Check if response is a list (expected format for successful response)
+    if not isinstance(data, list):
+        raise ValueError(f"Unexpected response format from CoinGecko API: {type(data)}")
+    
+    return data
 
 def upload_to_gcs(bucket_name, data, blob_name=None, path_prefix=None):
     """
@@ -242,6 +262,11 @@ def main():
             if conn and new_id:
                 try:
                     with conn.cursor() as cursor:
+                        # Log the error as a task_event
+                        error_notes = f"Task failed with error: {str(e)}"
+                        cursor.execute("INSERT INTO task_events (task_id, event_type, changed_by, notes) VALUES (%s, 'error', %s, %s)", (new_id, TASK_TAG, error_notes))
+                        
+                        # Mark task as failed
                         error_meta = {"error": str(e)}
                         error_meta_json = json.dumps(error_meta)
                         update_query = "UPDATE tasks SET task_status = 'failed', task_completed_at = CURRENT_TIMESTAMP, task_meta_data = %s WHERE task_id = %s;"
