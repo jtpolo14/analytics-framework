@@ -21,6 +21,7 @@ BUCKET_NAME = os.getenv('BUCKET_NAME')
 PATH_PREFIX = os.getenv('PATH_PREFIX')
 
 ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY')
+STALE_TASK_THRESHOLD_HOURS = float(os.getenv('STALE_TASK_THRESHOLD_HOURS', 1.0))
 
 # Group database configuration
 db_config = SimpleNamespace(
@@ -271,14 +272,10 @@ def suggest_next_steps(task_data, api_key=None, model="claude-haiku-4-5-20251001
     Given the following task and task_events, analyze the data and return the appropriate action, confidence, and context:
 
     Action Classification Guidelines:
-    - The task event history has not been updated after 1 hour
+    - The task event history has not been updated after {STALE_TASK_THRESHOLD_HOURS} hour(s)
     - The action field must be one of the following:
         - MARK_ABANDONED
-            - there are no clear signs of failure, classify as MARK_ABANDONED.
-        - MARK_COMPLETED
-            - there are clear signs of job success, classify as MARK_COMPLETED.
-        - MARK_FAILED
-            - there are clear signs of failure, classify as MARK_FAILED.
+            - there are no clear signs of human intervention required, classify as MARK_ABANDONED.
         - MARK_HITL
             - there are follow up human intervention required, provide a detailed context for the action and classify as MARK_HITL.
 
@@ -287,7 +284,10 @@ def suggest_next_steps(task_data, api_key=None, model="claude-haiku-4-5-20251001
 
     Context Guidelines:
     - The context field must be a string that explains the reasoning for the action and confidence.
-    - always include the task id and the review count in the context for easy reference.
+    - always include the task id in the context for easy reference.
+    - Any event with "changed_by": "transformer-task-cleaner":
+        - MUST NOT be used as evidence of task progress, failure, or blockage.
+        - 
 
     Review Count Guidelines:
     - The review count field must be a number that indicates the number of times the task has been reviewed including the current review.
@@ -339,12 +339,21 @@ def main():
  
         with conn.cursor() as cursor:
                 # --- Main Task Logic ---
-    
-                print("Fetching stale task data...")
-                stale_task_data = get_stale_tasks()
-
-                
-                if stale_task_data:
+                # Loop until no more stale tasks are found
+                while True:
+                    print("Fetching stale task data...")
+                    stale_task_data = get_stale_tasks()
+                    
+                    # Break loop if no stale tasks found
+                    if not stale_task_data:
+                        print("No stale task data found")
+                        task_event_metadata = {"job_status": "no_stale_tasks"}
+                        event_notes = f"Data fetch result: {json.dumps(task_event_metadata)}"
+                        cursor.execute("INSERT INTO task_events (task_id, event_type, changed_by, notes) VALUES (%s, 'log', %s, %s)", (new_id, JOB_TAG, event_notes))
+                        conn.commit()
+                        break
+                    
+                    # Process the stale task
                     print(f"Data fetched successfully for Task #{stale_task_data[0]}")
                     task_event_metadata = {"stale_task_data": stale_task_data}
                     
@@ -355,7 +364,9 @@ def main():
                         "task_claimed": stale_task_data[0],
                         "task_claimed_by": new_id,
                         "task_claim_created_at": datetime.now().isoformat(),
-                        "task_claim_expires_at": (datetime.now() + timedelta(hours=0.5)).isoformat()
+                        "task_claim_expires_at": (datetime.now() + timedelta(hours=0.5)).isoformat(),
+                        "task_claim_type": "stale_task_cleanup",
+                        "task_claim_notes": "stale task claimed by transformer-task-cleaner"
                     })
                     cursor.execute("INSERT INTO task_events (task_id, event_type, changed_by, event_tag, payload) VALUES (%s, 'log', %s, %s, %s)", (new_id, JOB_TAG, event_tag, payload))
                     event_tag = "agent_generated_task_claim_exec"
@@ -375,21 +386,35 @@ def main():
                         event_tag = "agent_generated_next_steps"
                         event_notes = f"Agent generated next steps for task {stale_task_data[0]}"
                         cursor.execute("INSERT INTO task_events (task_id, event_type, changed_by, notes, event_tag, payload) VALUES (%s, 'log', %s, %s, %s, %s)", (stale_task_data[0], JOB_TAG, event_notes, event_tag, payload))
+                        conn.commit()
+                        
+
+                        # Update the task status as 'abandoned' only if conditions are met
+                        review_count = next_steps.get("review_count", 0)
+                        action = next_steps.get("action", "")
+                        confidence = next_steps.get("confidence", 0.0)
+                        task_status_update_note = "Task status update not required"
+                        if (review_count >= 3 and 
+                            action == "MARK_ABANDONED" and 
+                            confidence >= 0.85):
+                            task_status_update_note = "Task status updated to 'abandoned'"
+                            update_query = "UPDATE tasks SET task_status = 'abandoned' WHERE task_id = %s;"
+                            cursor.execute(update_query, (stale_task_data[0],))
+                            conn.commit()
+                            print(f"Marked task {stale_task_data[0]} as 'abandoned' (review_count={review_count}, action={action}, confidence={confidence})")
+                        else:
+                            print(f"Skipping task status update. Conditions not met (review_count={review_count}, action={action}, confidence={confidence})")
+
                         event_tag = "agent_generated_task_claim_done"
                         payload = json.dumps({
                         "task_claimed": stale_task_data[0],
                         "task_claimed_by": new_id,
                         "task_claim_ended_at": datetime.now().isoformat(),
-                        "event_notes": "Task next steps generated ok"
+                        "task_claim_type": "stale_task_cleanup",
+                        "task_claim_notes": " | ".join(["Task next steps generated ok", task_status_update_note])
                         })
                         cursor.execute("INSERT INTO task_events (task_id, event_type, changed_by, event_tag, payload) VALUES (%s, 'log', %s, %s, %s)", (new_id, JOB_TAG, event_tag, payload))
                         conn.commit()
-                else:
-                    print("No stale task data found")
-                    task_event_metadata = {"job_status": "no_stale_tasks"}
-                    event_notes = f"Data fetch result: {json.dumps(task_event_metadata)}"
-                    cursor.execute("INSERT INTO task_events (task_id, event_type, changed_by, notes) VALUES (%s, 'log', %s, %s)", (new_id, JOB_TAG, event_notes))
-                    conn.commit()
         
         # Mark execution as successful if we reach here
         task_execution_status = 'success'
