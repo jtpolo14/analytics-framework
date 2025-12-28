@@ -290,7 +290,12 @@ def track_endpoint():
 @app.route("/")
 def index():
     """Stats route - returns endpoint hit counts."""
-    return jsonify(endpoint_hits)
+    response_data = {
+        "task_id": new_id,
+        "endpoint_hits": {**endpoint_hits},
+        "timestamp": datetime.now().isoformat()
+    }
+    return jsonify(response_data)
 
 @app.route("/request/marketcap/desc")
 def request_market_cap_desc():

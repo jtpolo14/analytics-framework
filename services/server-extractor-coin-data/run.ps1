@@ -35,12 +35,12 @@ function create_service {
 }
 
 function replace_service {
-    Write-Host "Deploying Cloud Run service [part 1 - replace]..."
+    Write-Host "Replacing Cloud Run service..."
     gcloud run services replace $CONFIG_YAML --region $REGION --project $PROJECT_ID
 }
 
 function update_service {
-    Write-Host "Deploying Cloud Run service  [part 2 - update]..."
+    Write-Host "Updating Cloud Run service..."
     gcloud run services update $PROCESS_ID --region=$REGION --project=$PROJECT_ID --add-cloudsql-instances=$CLOUD_SQL_INSTANCE --set-secrets=DB_PASSWORD=db-password:latest
 }
 
