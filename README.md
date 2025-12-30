@@ -4,6 +4,7 @@
 
 - **GCP Hosted**: Fully hosted on Google Cloud Platform with Cloud Run services and jobs
 - **MySQL Integration**: Database connectivity for task tracking, event logging, and data persistence
+- **Daily Stock Market Feed**: Automated daily extraction of stock market data for 77+ major symbols via Financial Modeling Prep API, with comprehensive error handling and GCS storage
 - **Backend Technologies**: 
   - Go and Python support for flexible backend development
   - RESTful API services for data extraction and processing
@@ -24,6 +25,12 @@
 analytics-framework/
 ├── jobs/
 │   ├── extractor-coin-data/
+│   │   ├── Dockerfile
+│   │   ├── job.yaml
+│   │   ├── main.py
+│   │   ├── requirements.txt
+│   │   └── run.ps1
+│   ├── extractor-stock-data/
 │   │   ├── Dockerfile
 │   │   ├── job.yaml
 │   │   ├── main.py
