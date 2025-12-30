@@ -18,6 +18,7 @@
 - **Scheduler**: Automated job scheduling and execution management
 - **Containerized**: Docker-based deployment for consistent environments
 - **Multi-language Support**: PowerShell and shell scripts for cross-platform execution
+- **DevOps Automation**: Template-based job creation script (`create_job.py`) for rapid job scaffolding with automatic placeholder replacement, configuration updates, and standardized file structure generation
 
 ## Framework Structure
 
@@ -72,6 +73,51 @@ analytics-framework/
 - add the matching shell and/or powershell scripts for execution on linux/win
 - add Agentic-to-Human loop
 - add scheduler config to the jobs run scripts 
+
+## Creating New Jobs
+
+All jobs follow a standard 5-file structure:
+- `Dockerfile` - Container definition
+- `job.yaml` - Cloud Run job configuration
+- `main.py` (or custom name) - Main Python script
+- `requirements.txt` - Python dependencies
+- `run.ps1` - PowerShell deployment script
+
+### Using the Job Creation Script
+
+Use the `create_job.py` script to quickly create a new job from a template:
+
+```bash
+# Basic usage - creates a new job from the default template
+python create_job.py my-new-job
+
+# Use a different template job
+python create_job.py my-new-job --template extractor-stock-data
+
+# Customize the Python filename
+python create_job.py my-new-job --python-file processor.py
+
+# Full example with all options
+python create_job.py transformer-custom --template transformer-nhc-v1 --python-file transformer.py --project-id my-project --region us-east1
+```
+
+Or on Windows PowerShell:
+```powershell
+python create_job.py my-new-job
+python create_job.py my-new-job --template extractor-stock-data
+```
+
+The script will:
+1. Create a new job folder in `jobs/`
+2. Copy all template files
+3. Replace placeholders (job names, image names, etc.) with your new job name
+4. Update configuration files with your project settings
+
+After creation, you'll need to:
+1. Edit the Python file to implement your job logic
+2. Update `job.yaml` with your environment variables
+3. Update `requirements.txt` with your dependencies
+4. Review `run.ps1` if you need custom deployment settings
 
 ## Standards
 
