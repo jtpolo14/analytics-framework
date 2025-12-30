@@ -8,7 +8,7 @@
 - **Backend Technologies**: 
   - Go and Python support for flexible backend development
   - RESTful API services for data extraction and processing
-- **Frontend**: Google AI Studio integration for user interface and interactions
+- **Frontend**: Google AI Studio integration for user interface and interactions https://ai.studio/apps/drive/1gV10EtNh60RRidtm36zYrtAzYiJ10Xkl
 - **Brain**: Anthropic LLM integration for intelligent decision-making and processing
 - **Task & Event Based Architecture**: 
   - Task-driven execution model with status tracking
