@@ -101,12 +101,6 @@ python create_job.py my-new-job --python-file processor.py
 python create_job.py transformer-custom --template transformer-nhc-v1 --python-file transformer.py --project-id my-project --region us-east1
 ```
 
-Or on Windows PowerShell:
-```powershell
-python create_job.py my-new-job
-python create_job.py my-new-job --template extractor-stock-data
-```
-
 The script will:
 1. Create a new job folder in `jobs/`
 2. Copy all template files
