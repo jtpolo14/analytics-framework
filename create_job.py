@@ -28,7 +28,17 @@ def replace_placeholders(content: str, template_job: str, new_job: str,
     # Replace job name references (with and without 'job-' prefix)
     template_full_job_name = f"job-{template_job}"
     content = content.replace(template_full_job_name, full_job_name)
-    content = content.replace(template_job, new_job)
+    # Use regex to replace only complete matches, not substrings
+    # Match template_job only when it's a complete identifier (not part of another identifier)
+    template_job_pattern = re.escape(template_job)
+    # Match only when preceded by start of string, non-alphanumeric, or hyphen followed by non-alphanumeric
+    # and followed by end of string, non-alphanumeric, or hyphen followed by non-alphanumeric
+    # This ensures we match the complete template_job, not a substring
+    content = re.sub(rf'(?<![a-z0-9]){template_job_pattern}(?![a-z0-9])', new_job, content)
+    
+    # Also replace any job name found in metadata.name field (handles cases where template has different job name)
+    # Pattern: "name: job-*" should become "name: {full_job_name}"
+    content = re.sub(r'(\s+name:\s+)job-[a-z0-9-]+', rf'\1{full_job_name}', content)
     
     # Replace image references (any region/project pattern)
     image_pattern = r'[a-z0-9-]+-docker\.pkg\.dev/[^/]+/cloud-run-source-deploy/[^:]+:latest'
