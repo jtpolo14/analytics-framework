@@ -249,7 +249,7 @@ def read_gcs(file_name):
 def get_unprocessed_files(prefix=None):
     """
     Get all files in the bucket that match nhc_gtwo_{timestamp}.xml pattern
-    and don't have a corresponding _analytics.xml file.
+    and don't have a corresponding _analytics.json file.
     
     Args:
         prefix: Optional prefix to filter files (e.g., PATH_PREFIX). 
@@ -288,8 +288,8 @@ def get_unprocessed_files(prefix=None):
                 base_files[timestamp] = blob.name
                 continue
             
-            # Check if it's an analytics file (nhc_gtwo_{timestamp}_analytics.xml)
-            analytics_pattern = re.compile(r'nhc_gtwo_(\d{8}_\d{6})_analytics\.xml$')
+            # Check if it's an analytics file (nhc_gtwo_{timestamp}_analytics.json)
+            analytics_pattern = re.compile(r'nhc_gtwo_(\d{8}_\d{6})_analytics\.json$')
             analytics_match = analytics_pattern.match(file_name)
             if analytics_match:
                 timestamp = analytics_match.group(1)
@@ -328,11 +328,11 @@ def upload_to_gcs(bucket_name, data, blob_name=None, path_prefix=None):
         # Generate filename with timestamp if not provided
         if blob_name is None:
             timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
-            blob_name = f"{path_prefix}/nhc_gtwo_{timestamp}.xml"
+            blob_name = f"{path_prefix}/nhc_gtwo_{timestamp}.json"
         
         # Create blob and upload
         blob = bucket.blob(blob_name)
-        blob.upload_from_string(data, content_type='application/xml')
+        blob.upload_from_string(data, content_type='application/json')
         
         print(f"File uploaded successfully to gs://{BUCKET_NAME}/{blob_name}")
         return f"gs://{BUCKET_NAME}/{blob_name}"
@@ -391,15 +391,48 @@ def main():
                         
                         # Generate output filename
                         file_name = file_path.split('/')[-1]
-                        output_file_name = f"{PATH_PREFIX}/{file_name.replace('.xml', '_analytics.xml')}"
+                        output_file_name = f"{PATH_PREFIX}/{file_name.replace('.xml', '_analytics.json')}"
                         
                         # Process file_data and generate analytics output
                         output_data, call_stats = extract_nhc_economic_signal(file_data, api_key=ANTHROPIC_API_KEY)
                         all_call_stats.append(call_stats)
                         
+                        # Parse JSON and wrap in output object with metadata
+                        # Strip whitespace and handle markdown code blocks if present
+                        cleaned_data = output_data.strip()
+                        
+                        # Remove markdown code blocks if present (e.g., ```json ... ```)
+                        if cleaned_data.startswith('```'):
+                            # Find the first newline after the opening ```
+                            first_newline = cleaned_data.find('\n')
+                            if first_newline != -1:
+                                # Find the closing ```
+                                closing = cleaned_data.rfind('```')
+                                if closing > first_newline:
+                                    cleaned_data = cleaned_data[first_newline+1:closing].strip()
+                        
+                        # Validate and parse JSON
+                        if not cleaned_data:
+                            print(f"output_data: {output_data}")
+                            raise ValueError(f"Empty response from API for file {file_path}")
+                        
+                        try:
+                            parsed_data = json.loads(cleaned_data)
+                        except json.JSONDecodeError as e:
+                            print(f"JSON decode error for file {file_path}. Response preview: {cleaned_data[:500]}")
+                            raise ValueError(f"Invalid JSON response from API: {str(e)}. Response length: {len(cleaned_data)} chars")
+                        
+                        # Wrap data with metadata
+                        output_wrapped = {
+                            "output": parsed_data,
+                            "timestamp": datetime.utcnow().isoformat() + "Z",
+                            "source_file": file_name
+                        }
+                        response_wrapped = json.dumps(output_wrapped, indent=2)
+                        
                         # Upload analytics file
                         print(f"Uploading analytics to GCS: {output_file_name}...")
-                        gcs_path = upload_to_gcs(BUCKET_NAME, output_data, blob_name=output_file_name)
+                        gcs_path = upload_to_gcs(BUCKET_NAME, response_wrapped, blob_name=output_file_name)
                         print(f"Successfully uploaded to: {gcs_path}")
                 
                 # Calculate aggregate call statistics
