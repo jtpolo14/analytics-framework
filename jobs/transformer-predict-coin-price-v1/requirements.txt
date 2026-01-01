@@ -1,0 +1,7 @@
+pymysql==1.1.0
+google-cloud-storage
+anthropic
+pandas
+numpy
+scikit-learn
+joblib

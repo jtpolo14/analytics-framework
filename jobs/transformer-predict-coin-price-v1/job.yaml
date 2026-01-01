@@ -1,0 +1,33 @@
+# job.yaml
+apiVersion: run.googleapis.com/v1
+kind: Job
+metadata:
+  name: job-transformer-predict-coin-price-v1
+spec:
+  template:
+    spec:
+      taskCount: 1
+      template:
+        spec:
+          containers:
+            - image: us-central1-docker.pkg.dev/dulcet-iterator-344116/cloud-run-source-deploy/job-transformer-predict-coin-price-v1:latest
+              env:
+                - name: BUCKET_NAME
+                  value: "thomasanalytics-data1"
+                - name: MODEL_BUCKET_PATH
+                  value: "lake/models/btc_price_model/pkl"
+                - name: DEFAULT_MODEL_BUCKET_PATH
+                  value: "lake/models/btc_price_model/pkl/prod"
+                - name: PATH_PREFIX
+                  value: "lake/coins/usd_market_cap_desc/"
+                - name: DB_USER
+                  value: "admin-1"
+                - name: DB_HOST
+                  value: "/cloudsql/dulcet-iterator-344116:us-central1:de-course-dev"
+                - name: DB_PORT
+                  value: "3306"
+                - name: DB_NAME
+                  value: "core"
+          timeoutSeconds: 600
+          serviceAccountName: 619238021876-compute@developer.gserviceaccount.com
+
