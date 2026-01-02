@@ -1,8 +1,13 @@
 """
-Development runner script for cryptocurrency price prediction.
+Development runner script for cryptocurrency price prediction (v1.1).
 
 This script handles data loading and orchestration. The actual model logic
-is in btc_price_model.py, allowing easy model swapping and testing.
+is in btc_price_model_v1_1.py, allowing easy model swapping and testing.
+
+v1.1 Model Features:
+- Predicts future 5-minute interval BTC price (not current price)
+- Includes technical indicators: Moving Averages (10, 20, 50, 200), RSI, VWAP
+- Requires historical snapshots for proper feature engineering
 
 DATA SOURCES:
 ============
@@ -48,7 +53,7 @@ MODEL CUSTOMIZATION:
 ====================
 
 To use a different model, modify the model import and instantiation in main():
-   from btc_price_model import BTCPricePredictor
+   from btc_price_model_v1_1 import BTCPricePredictor
    from sklearn.ensemble import RandomForestRegressor
    
    model = BTCPricePredictor(model=RandomForestRegressor())
@@ -61,8 +66,8 @@ from typing import List, Dict, Any, Optional
 import pandas as pd
 import numpy as np
 
-# Import the model class
-from btc_price_model import BTCPricePredictor
+# Import the model class (v1.1 - predicts future 5-minute interval BTC price)
+from btc_price_model_v1_1 import BTCPricePredictor, extract_btc_from_snapshot
 
 # GCS imports (optional - only needed if using GCS)
 try:
@@ -130,8 +135,7 @@ def load_data_from_file(file_path: str) -> List[Dict[str, Any]]:
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
-        print(f"Loaded data from local file: {file_path}")
-        print(f"Found {len(data)} cryptocurrency records")
+        # Suppress success messages - only show errors
         return data
     except FileNotFoundError:
         raise FileNotFoundError(f"File not found: {file_path}")
@@ -214,8 +218,7 @@ def load_data_from_gcs(bucket_path: str, bucket_name: Optional[str] = None, stor
         
         data = json.loads(file_content.decode('utf-8'))
         
-        print(f"Loaded data from GCS: gs://{bucket_name}/{file_path}")
-        print(f"Found {len(data)} cryptocurrency records")
+        # Suppress success messages - only show errors
         return data
         
     except Exception as e:
@@ -285,7 +288,7 @@ def get_latest_files_from_bucket(
         if prefix and not prefix.endswith("/"):
             prefix += "/"
         
-        print(f"Searching for latest {n_files} files in gs://{bucket_name}/{prefix}")
+        # Suppress search message - only show errors
         
         # List files in the bucket
         list_start = time.time()
@@ -315,10 +318,7 @@ def get_latest_files_from_bucket(
         # Return full GCS paths in ascending chronological order (oldest to newest)
         file_paths = [f"gs://{bucket_name}/{blob.name}" for blob in latest_blobs]
         
-        print(f"Found {len(latest_blobs)} file(s) (requested {n_files}) in {list_duration:.3f}s")
-        print("Files in chronological order (oldest to newest):")
-        for i, path in enumerate(file_paths, 1):
-            print(f"  {i}. {path}")
+        # Suppress success messages - only show errors
         
         return file_paths
         
@@ -364,7 +364,7 @@ def get_latest_model_from_bucket(
         if prefix and not prefix.endswith("/"):
             prefix += "/"
         
-        print(f"Searching for latest model file in gs://{bucket_name}/{prefix}")
+        # Suppress search message - only show errors
         
         # List files in the bucket
         list_start = time.time()
@@ -390,7 +390,7 @@ def get_latest_model_from_bucket(
         # Return full GCS path
         file_path = f"gs://{bucket_name}/{latest_blob.name}"
         
-        print(f"Found latest model: {latest_blob.name} (created: {latest_blob.time_created}) in {list_duration:.3f}s")
+        # Suppress success message - only show errors
         
         return file_path
         
@@ -424,7 +424,7 @@ def load_multiple_snapshots(data_paths: List[str], bucket_name: Optional[str] = 
             storage_client = get_gcs_client()
     
     for i, path in enumerate(data_paths, 1):
-        print(f"\nLoading snapshot {i}/{len(data_paths)}: {path}")
+        # Suppress loading progress - only show errors
         load_start = time.time()
         try:
             snapshot = load_data_from_path(path, bucket_name, storage_client)
@@ -432,10 +432,10 @@ def load_multiple_snapshots(data_paths: List[str], bucket_name: Optional[str] = 
             load_times.append(load_duration)
             snapshots.append(snapshot)
             total_records += len(snapshot)
-            print(f"  ✓ Loaded in {load_duration:.3f}s ({len(snapshot)} records)")
+            # Suppress success message - only show errors
         except Exception as e:
             load_duration = time.time() - load_start
-            print(f"  ✗ Failed in {load_duration:.3f}s: {str(e)}")
+            print(f"  [ERROR] Failed to load snapshot {i}/{len(data_paths)} ({path}) in {load_duration:.3f}s: {str(e)}")
             print(f"  Skipping this snapshot...")
             continue
     
@@ -455,9 +455,7 @@ def load_multiple_snapshots(data_paths: List[str], bucket_name: Optional[str] = 
         }
     }
     
-    print(f"\n✓ Successfully loaded {len(snapshots)} snapshot(s) in {total_duration:.3f}s")
-    print(f"  Total records: {total_records:,}")
-    print(f"  Average load time: {avg_load_time:.3f}s per snapshot")
+    # Suppress success messages - only show errors
     
     return snapshots, timing_info
 
@@ -515,7 +513,7 @@ def train_and_predict_with_model(
         "n_samples": len(X_train),
         "n_features": X_train.shape[1] if len(X_train) > 0 else 0
     }
-    print(f"  ⏱️  Completed in {step_duration:.3f}s")
+    print(f"  [TIME] Completed in {step_duration:.3f}s")
     
     print(f"\nTraining dataset shape: {X_train.shape}")
     print(f"Target shape: {y_train.shape}")
@@ -535,7 +533,7 @@ def train_and_predict_with_model(
         "n_samples": len(X_train),
         "n_features": X_train.shape[1] if len(X_train) > 0 else 0
     }
-    print(f"  ⏱️  Completed in {step_duration:.3f}s")
+    print(f"  [TIME] Completed in {step_duration:.3f}s")
     
     # Step 3: Make prediction on new snapshot (or last snapshot if none provided)
     if prediction_snapshot is None:
@@ -548,18 +546,36 @@ def train_and_predict_with_model(
     # Get actual BTC price for comparison
     actual_btc_price = get_btc_price(prediction_snapshot)
     
-    # Make prediction
-    predicted_price = model.predict(prediction_snapshot)
+    # For v1.1, extract historical BTC prices/volumes from previous snapshots for technical indicators
+    btc_price_history = None
+    btc_volume_history = None
+    if len(historical_snapshots) > 0:
+        # Extract BTC data from all historical snapshots
+        btc_price_history = []
+        btc_volume_history = []
+        for snapshot in historical_snapshots:
+            btc_data = extract_btc_from_snapshot(snapshot)
+            if btc_data:
+                btc_price_history.append(btc_data.get('current_price', 0))
+                btc_volume_history.append(btc_data.get('total_volume', 0))
+    
+    # Make prediction (v1.1 predicts future price)
+    predicted_price = model.predict(
+        prediction_snapshot,
+        btc_price_history=btc_price_history if btc_price_history else None,
+        btc_volume_history=btc_volume_history if btc_volume_history else None
+    )
     step_duration = time.time() - step_start
     timing_info["prediction"] = {
         "duration_seconds": step_duration,
         "prediction_records": len(prediction_snapshot)
     }
-    print(f"  ⏱️  Completed in {step_duration:.3f}s")
+    print(f"  [TIME] Completed in {step_duration:.3f}s")
     
-    print(f"\n=== Step 4: Prediction Results ===")
-    print(f"Predicted BTC Price: ${predicted_price:,.2f}")
-    print(f"Actual BTC Price: ${actual_btc_price:,.2f}")
+    print(f"\n=== Step 4: Prediction Results (v1.1 - Future Price) ===")
+    print(f"Predicted Future BTC Price: ${predicted_price:,.2f}")
+    print(f"Actual Current BTC Price: ${actual_btc_price:,.2f}")
+    print(f"Note: v1.1 predicts the NEXT 5-minute interval price")
     print(f"Difference: ${abs(predicted_price - actual_btc_price):,.2f}")
     print(f"Error Percentage: {abs(predicted_price - actual_btc_price) / actual_btc_price * 100:.2f}%")
     
@@ -611,19 +627,25 @@ def predict_with_loaded_model(
     actual_btc_price = get_btc_price(snapshot_data)
     step_duration = time.time() - step_start
     
-    # Make prediction
+    # Make prediction (v1.1 - pass None for history if not available)
+    # Note: For better predictions with v1.1, provide historical snapshots
     step_start = time.time()
-    predicted_price = model.predict(snapshot_data)
+    predicted_price = model.predict(
+        snapshot_data,
+        btc_price_history=None,  # Can be enhanced to extract from previous snapshots if available
+        btc_volume_history=None
+    )
     pred_duration = time.time() - step_start
     timing_info["prediction"] = {
         "duration_seconds": pred_duration,
         "prediction_records": len(snapshot_data)
     }
-    print(f"  ⏱️  Prediction completed in {pred_duration:.3f}s")
+    print(f"  [TIME] Prediction completed in {pred_duration:.3f}s")
     
-    print(f"\n=== Prediction Results ===")
-    print(f"Predicted BTC Price: ${predicted_price:,.2f}")
-    print(f"Actual BTC Price: ${actual_btc_price:,.2f}")
+    print(f"\n=== Prediction Results (v1.1 - Future Price) ===")
+    print(f"Predicted Future BTC Price: ${predicted_price:,.2f}")
+    print(f"Actual Current BTC Price: ${actual_btc_price:,.2f}")
+    print(f"Note: v1.1 predicts the NEXT 5-minute interval price")
     print(f"Difference: ${abs(predicted_price - actual_btc_price):,.2f}")
     print(f"Error Percentage: {abs(predicted_price - actual_btc_price) / actual_btc_price * 100:.2f}%")
     
@@ -679,12 +701,18 @@ def predict_single_snapshot(
         timing_info["model_training"] = {"duration_seconds": train_duration}
     
     step_start = time.time()
-    predicted_price = model.predict(snapshot_data)
+    # v1.1 predict with no history (single snapshot case)
+    predicted_price = model.predict(
+        snapshot_data,
+        btc_price_history=None,
+        btc_volume_history=None
+    )
     pred_duration = time.time() - step_start
     timing_info["prediction"] = {"duration_seconds": pred_duration}
     
-    print(f"\nPredicted BTC Price: ${predicted_price:,.2f}")
-    print(f"Actual BTC Price: ${actual_btc_price:,.2f}")
+    print(f"\nPredicted Future BTC Price (v1.1): ${predicted_price:,.2f}")
+    print(f"Actual Current BTC Price: ${actual_btc_price:,.2f}")
+    print(f"Note: v1.1 predicts the NEXT 5-minute interval price")
     print(f"Difference: ${abs(predicted_price - actual_btc_price):,.2f}")
     
     return {
@@ -795,7 +823,8 @@ Examples:
     all_timing_info = {}
     
     print("=" * 60)
-    print("Cryptocurrency Price Prediction Model")
+    print("Cryptocurrency Price Prediction Model (v1.1)")
+    print("Predicts future 5-minute interval BTC price")
     print("=" * 60)
     
     # Determine data paths from arguments, environment variables, or defaults
@@ -803,7 +832,7 @@ Examples:
     
     # Check if bucket-path is specified (highest priority)
     if args.bucket_path:
-        print(f"\nGetting latest {args.latest_n} files from bucket path: {args.bucket_path}")
+        # Suppress bucket listing message - only show errors
         bucket_list_start = time.time()
         try:
             data_paths = get_latest_files_from_bucket(args.bucket_path, args.latest_n, args.bucket_name)
@@ -812,7 +841,7 @@ Examples:
                 "duration_seconds": bucket_list_duration,
                 "files_found": len(data_paths)
             }
-            print(f"\nRetrieved {len(data_paths)} file path(s) from bucket")
+            # Suppress success message - only show errors
         except Exception as e:
             print(f"\nError getting latest files from bucket: {str(e)}")
             raise
@@ -847,43 +876,43 @@ Examples:
                 "duration_seconds": load_duration,
                 "filepath": args.load_model
             }
-            print(f"  ⏱️  Model loaded in {load_duration:.3f}s")
+            print(f"  [TIME] Model loaded in {load_duration:.3f}s")
             model_loaded = True
         except Exception as e:
             print(f"Error loading model: {str(e)}")
             print("Falling back to creating a new model...")
             model = BTCPricePredictor(use_regularization=True)
     else:
-        # No model specified - try to load latest model from default GCS path
-        default_model_path = os.getenv('DEFAULT_MODEL_BUCKET_PATH', 'lake/models/btc_price_model/pkl/prod')
-        bucket_name = os.getenv('BUCKET_NAME', 'thomasanalytics-data1')
-        
-        print(f"\n=== No model specified, attempting to load latest from default path ===")
-        print(f"  Default path: gs://{bucket_name}/{default_model_path}")
-        
-        load_start = time.time()
-        try:
-            latest_model_path = get_latest_model_from_bucket(default_model_path, bucket_name)
-            print(f"\n=== Loading Latest Model from {latest_model_path} ===")
-            model = BTCPricePredictor.load_model(latest_model_path)
-            load_duration = time.time() - load_start
-            all_timing_info["model_loading"] = {
-                "duration_seconds": load_duration,
-                "filepath": latest_model_path,
-                "source": "default_bucket_path"
-            }
-            print(f"  ⏱️  Model loaded in {load_duration:.3f}s")
-            model_loaded = True
-        except Exception as e:
-            print(f"  ⚠️  Could not load model from default path: {str(e)}")
-            print(f"  Creating a new model instead...")
-            # Create model instance
-            # To use a different model, change this line:
-            # from sklearn.ensemble import RandomForestRegressor
-            # model = BTCPricePredictor(model=RandomForestRegressor())
-            # 
-            # By default, uses Ridge regression (L2 regularization) to prevent overfitting
-            # Set use_regularization=False to use plain LinearRegression
+        # No model specified - only try to load from default GCS path if we don't have data paths for training
+        # If we have data paths, we want to train a new model, so skip loading
+        if data_paths is None:
+            # No data paths - try to load latest model from default GCS path
+            default_model_path = os.getenv('DEFAULT_MODEL_BUCKET_PATH', 'lake/models/btc_price_model/pkl/prod')
+            bucket_name = os.getenv('BUCKET_NAME', 'thomasanalytics-data1')
+            
+            print(f"\n=== No model specified, attempting to load latest from default path ===")
+            print(f"  Default path: gs://{bucket_name}/{default_model_path}")
+            
+            load_start = time.time()
+            try:
+                latest_model_path = get_latest_model_from_bucket(default_model_path, bucket_name)
+                print(f"\n=== Loading Latest Model from {latest_model_path} ===")
+                model = BTCPricePredictor.load_model(latest_model_path)
+                load_duration = time.time() - load_start
+                all_timing_info["model_loading"] = {
+                    "duration_seconds": load_duration,
+                    "filepath": latest_model_path,
+                    "source": "default_bucket_path"
+                }
+                print(f"  [TIME] Model loaded in {load_duration:.3f}s")
+                model_loaded = True
+            except Exception as e:
+                print(f"  [WARNING] Could not load model from default path: {str(e)}")
+                print(f"  Creating a new model instead...")
+                model = BTCPricePredictor(use_regularization=True)
+        else:
+            # We have data paths - create a new model for training
+            print(f"\n=== Creating new model for training ===")
             model = BTCPricePredictor(use_regularization=True)
     
     # Load data from files/GCS if paths provided
@@ -978,7 +1007,7 @@ Examples:
                 "duration_seconds": save_duration,
                 "filepath": args.save_model
             }
-            print(f"  ⏱️  Model saved in {save_duration:.3f}s")
+            print(f"  [TIME] Model saved in {save_duration:.3f}s")
         except Exception as e:
             print(f"Error saving model: {str(e)}")
     elif args.save_model and model_loaded:
@@ -1009,8 +1038,8 @@ Examples:
                 "gcs_path": gcs_path,
                 "bucket_path": model_bucket_path
             }
-            print(f"  ⏱️  Model saved to GCS in {save_duration:.3f}s")
-            print(f"  📦 GCS Path: {gcs_path}")
+            print(f"  [TIME] Model saved to GCS in {save_duration:.3f}s")
+            print(f"  [GCS] Path: {gcs_path}")
         except Exception as e:
             print(f"Error saving model to GCS bucket: {str(e)}")
     elif args.save_model_to_bucket and model_loaded:
@@ -1033,7 +1062,7 @@ Examples:
     # Data processing summary
     if "data_loading" in all_timing_info:
         dl = all_timing_info["data_loading"]
-        print(f"\n📊 Data Processing:")
+        print(f"\n[Data Processing]")
         print(f"   Snapshots loaded: {dl.get('snapshots_loaded', 0)}")
         print(f"   Total records: {dl.get('total_records', 0):,}")
         print(f"   Duration: {dl.get('total_duration_seconds', 0):.3f}s")
@@ -1042,14 +1071,14 @@ Examples:
     # Model training summary
     if "dataset_building" in all_timing_info:
         db = all_timing_info["dataset_building"]
-        print(f"\n🔧 Dataset Building:")
+        print(f"\n[Dataset Building]")
         print(f"   Samples: {db.get('n_samples', 0)}")
         print(f"   Features: {db.get('n_features', 0)}")
         print(f"   Duration: {db.get('duration_seconds', 0):.3f}s")
     
     if "model_training" in all_timing_info:
         mt = all_timing_info["model_training"]
-        print(f"\n🎯 Model Training:")
+        print(f"\n[Model Training]")
         print(f"   Samples: {mt.get('n_samples', 0)}")
         print(f"   Features: {mt.get('n_features', 0)}")
         print(f"   Duration: {mt.get('duration_seconds', 0):.3f}s")
@@ -1057,15 +1086,15 @@ Examples:
     # Prediction summary
     if "prediction" in all_timing_info:
         pred = all_timing_info["prediction"]
-        print(f"\n🔮 Prediction:")
+        print(f"\n[Prediction]")
         print(f"   Duration: {pred.get('duration_seconds', 0):.3f}s")
     
     # Overall summary
-    print(f"\n⏱️  Total Execution Time: {overall_duration:.3f}s ({overall_duration/60:.2f} minutes)")
+    print(f"\n[TIME] Total Execution Time: {overall_duration:.3f}s ({overall_duration/60:.2f} minutes)")
     
     # Calculate breakdown percentages
     if overall_duration > 0:
-        print(f"\n📈 Time Breakdown:")
+        print(f"\n[Time Breakdown]")
         for step_name, step_info in all_timing_info.items():
             if step_name != "total_execution" and isinstance(step_info, dict):
                 step_duration = step_info.get("duration_seconds", 0)

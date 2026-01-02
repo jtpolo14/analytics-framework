@@ -1,9 +1,21 @@
 # PowerShell equivalent of run.sh
+# NOTE: For local development, .venv should be used as the dev environment
+# Activate with: .\.venv\Scripts\Activate.ps1
+# Or ensure .venv is activated before running Python commands
+
 param(
     [string]$ACTIONS = ""
 )
 
 $ErrorActionPreference = "Stop"
+
+# Check and activate .venv for local development
+if (Test-Path ".venv\Scripts\Activate.ps1") {
+    Write-Host "Activating .venv virtual environment..."
+    & .\.venv\Scripts\Activate.ps1
+} else {
+    Write-Host "Warning: .venv not found. For local development, create with: python -m venv .venv"
+}
 
 # ---- Config ----
 $PROJECT_ID = "dulcet-iterator-344116"
@@ -13,7 +25,7 @@ $IMAGE = "us-central1-docker.pkg.dev/dulcet-iterator-344116/cloud-run-source-dep
 $JOB_YAML = "job.yaml"
 $CLOUD_SQL_INSTANCE = "dulcet-iterator-344116:us-central1:de-course-dev"
 $SCHEDULER_NAME = "$JOB_NAME-scheduler"
-$SCHEDULE = "0 23 * * *"  # Daily at 11PM
+$SCHEDULE = "*/5 * * * *"  # Every 5 minutes
 $SERVICE_ACCOUNT = "619238021876-compute@developer.gserviceaccount.com"
 $JOB_URI = "https://us-central1-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/$PROJECT_ID/jobs/${JOB_NAME}:run"
 
@@ -23,7 +35,7 @@ if ([string]::IsNullOrWhiteSpace($ACTIONS)) {
     Write-Host "  r = replace job (from YAML)"
     Write-Host "  u = update job (Cloud SQL, secrets, etc.)"
     Write-Host "  e = execute job"
-    Write-Host "  s = create scheduler job (daily at 11PM)"
+    Write-Host "  s = create scheduler job (every 5 minutes)"
     exit 1
 }
 

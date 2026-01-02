@@ -9,7 +9,7 @@ WORKDIR /workspace
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
+# Copy application code (includes runner.py, btc_price_model_v1_1.py, etc.)
 COPY . .
 
 # Command Cloud Run Job will execute

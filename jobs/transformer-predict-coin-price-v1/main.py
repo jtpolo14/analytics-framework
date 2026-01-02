@@ -1,5 +1,5 @@
 """
-Analyze National Hurricane Center XML data and save to database
+BTC Price Prediction Job - Predicts future 5-minute interval BTC price
 """
 from types import SimpleNamespace
 from google.cloud import storage
@@ -10,6 +10,7 @@ import pymysql
 import re
 import anthropic
 import time
+from runner import predict_btc_price
 
 # Retrieve Job-defined env vars
 JOB_EXECUTION_ID = os.getenv('CLOUD_RUN_EXECUTION')
@@ -343,7 +344,7 @@ def upload_to_gcs(bucket_name, data, blob_name=None, path_prefix=None):
 
 def main():
     """
-    Main function to process NHC data files and generate analytics
+    Main function to run BTC price prediction using default GCS prod model
     """
     print(f"Starting Task #{TASK_INDEX}, Attempt #{TASK_ATTEMPT}...")
     new_id = None
@@ -374,98 +375,21 @@ def main():
                 conn.commit()
  
                 # --- Main Task Logic ---
-                print("Finding unprocessed NHC data files...")
-                unprocessed_files = get_unprocessed_files(PATH_PREFIX)
+                print("Running BTC price prediction with default GCS prod model...")
                 
-                if not unprocessed_files:
-                    print("No unprocessed files found.")
-                    all_call_stats = []
-                else:
-                    print(f"Processing {len(unprocessed_files)} file(s)...")
-                    all_call_stats = []
-                    
-                    for file_path in unprocessed_files:
-                        # Read the file
-                        file_data, byte_count = read_gcs(file_path)
-                        print(f"Data fetched successfully ({byte_count} bytes)")
-                        
-                        # Generate output filename
-                        file_name = file_path.split('/')[-1]
-                        output_file_name = f"{PATH_PREFIX}/{file_name.replace('.xml', '_analytics.json')}"
-                        
-                        # Process file_data and generate analytics output
-                        output_data, call_stats = extract_nhc_economic_signal(file_data, api_key=ANTHROPIC_API_KEY)
-                        all_call_stats.append(call_stats)
-                        
-                        # Parse JSON and wrap in output object with metadata
-                        # Strip whitespace and handle markdown code blocks if present
-                        cleaned_data = output_data.strip()
-                        
-                        # Remove markdown code blocks if present (e.g., ```json ... ```)
-                        if cleaned_data.startswith('```'):
-                            # Find the first newline after the opening ```
-                            first_newline = cleaned_data.find('\n')
-                            if first_newline != -1:
-                                # Find the closing ```
-                                closing = cleaned_data.rfind('```')
-                                if closing > first_newline:
-                                    cleaned_data = cleaned_data[first_newline+1:closing].strip()
-                        
-                        # Validate and parse JSON
-                        if not cleaned_data:
-                            print(f"output_data: {output_data}")
-                            raise ValueError(f"Empty response from API for file {file_path}")
-                        
-                        try:
-                            parsed_data = json.loads(cleaned_data)
-                        except json.JSONDecodeError as e:
-                            print(f"JSON decode error for file {file_path}. Response preview: {cleaned_data[:500]}")
-                            raise ValueError(f"Invalid JSON response from API: {str(e)}. Response length: {len(cleaned_data)} chars")
-                        
-                        # Wrap data with metadata
-                        output_wrapped = {
-                            "output": parsed_data,
-                            "timestamp": datetime.utcnow().isoformat() + "Z",
-                            "source_file": file_name
-                        }
-                        response_wrapped = json.dumps(output_wrapped, indent=2)
-                        
-                        # Upload analytics file
-                        print(f"Uploading analytics to GCS: {output_file_name}...")
-                        gcs_path = upload_to_gcs(BUCKET_NAME, response_wrapped, blob_name=output_file_name)
-                        print(f"Successfully uploaded to: {gcs_path}")
+                # Get prediction result using default GCS prod model (model_file=None)
+                prediction_result = predict_btc_price(model_file=None)
                 
-                # Calculate aggregate call statistics
-                if all_call_stats:
-                    total_input_tokens = sum(stats["input_tokens"] for stats in all_call_stats)
-                    total_output_tokens = sum(stats["output_tokens"] for stats in all_call_stats)
-                    total_response_time = sum(stats["response_time_seconds"] for stats in all_call_stats)
-                    avg_response_time = total_response_time / len(all_call_stats)
-                else:
-                    total_input_tokens = 0
-                    total_output_tokens = 0
-                    total_response_time = 0
-                    avg_response_time = 0
+                print(f"Prediction result: {json.dumps(prediction_result, indent=2)}")
                 
-                # Log processing results
+                # Write result to task_event payload
+                event_tag = "metric_btc_price_prediction_v1_1"
                 task_event_metadata = {
                     "job_status": "ok",
-                    "files_processed": len(unprocessed_files),
-                    "llm_call_stats": {
-                        "total_calls": len(all_call_stats),
-                        "total_input_tokens": total_input_tokens,
-                        "total_output_tokens": total_output_tokens,
-                        "total_response_time_seconds": round(total_response_time, 3),
-                        "avg_response_time_seconds": round(avg_response_time, 3),
-                        "per_call_stats": all_call_stats
-                    }
+                    "prediction_result": prediction_result
                 }
-                print(f"Processing complete: {task_event_metadata}")
-                event_notes = f"Processing complete: {task_event_metadata}"
-                cursor.execute(
-                    "INSERT INTO task_events (task_id, event_type, changed_by, notes) VALUES (%s, 'log', %s, %s)",
-                    (new_id, JOB_TAG, event_notes)
-                )
+                payload = json.dumps(task_event_metadata)
+                cursor.execute("INSERT INTO task_events (task_id, event_type, changed_by, event_tag, payload) VALUES (%s, 'log', %s, %s, %s)", (new_id, JOB_TAG, event_tag, payload))
                 conn.commit()
     
                 # --- Success ---

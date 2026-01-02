@@ -18,7 +18,7 @@ spec:
                   value: "lake/models/btc_price_model/pkl"
                 - name: DEFAULT_MODEL_BUCKET_PATH
                   value: "lake/models/btc_price_model/pkl/prod"
-                - name: PATH_PREFIX
+                - name: COIN_DATA_PATH
                   value: "lake/coins/usd_market_cap_desc/"
                 - name: DB_USER
                   value: "admin-1"
