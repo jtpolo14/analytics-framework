@@ -30,12 +30,14 @@ $SERVICE_ACCOUNT = "619238021876-compute@developer.gserviceaccount.com"
 $JOB_URI = "https://us-central1-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/$PROJECT_ID/jobs/${JOB_NAME}:run"
 
 if ([string]::IsNullOrWhiteSpace($ACTIONS)) {
-    Write-Host "Usage: .\run.ps1 [i][r][u][e][s]"
+    Write-Host "Usage: .\run.ps1 [i][r][u][e][s][x][d]"
     Write-Host "  i = build & push image"
     Write-Host "  r = replace job (from YAML)"
     Write-Host "  u = update job (Cloud SQL, secrets, etc.)"
     Write-Host "  e = execute job"
     Write-Host "  s = create scheduler job (every 5 minutes)"
+    Write-Host "  x = disable/pause scheduler job"
+    Write-Host "  d = delete scheduler job"
     exit 1
 }
 
@@ -63,7 +65,7 @@ function execute_job {
 function create_scheduler {
     Write-Host "Creating Cloud Scheduler job..."
     Write-Host "  Scheduler name: $SCHEDULER_NAME"
-    Write-Host "  Schedule: $SCHEDULE (Daily at 11PM)"
+    Write-Host "  Schedule: $SCHEDULE (Every 5 minutes)"
     Write-Host "  Job URI: $JOB_URI"
     Write-Host "  Service Account: $SERVICE_ACCOUNT"
     
@@ -76,12 +78,34 @@ function create_scheduler {
         --http-method=POST
 }
 
+# Note: GCP automatically adds "-trigger" suffix to scheduler names when created
+function disable_scheduler {
+    Write-Host "Disabling Cloud Scheduler job..."
+    Write-Host "  Scheduler name: $SCHEDULER_NAME-trigger"
+    
+    gcloud scheduler jobs pause "$SCHEDULER_NAME-trigger" `
+        --location=$REGION `
+        --project=$PROJECT_ID
+}
+
+function delete_scheduler {
+    Write-Host "Deleting Cloud Scheduler job..."
+    Write-Host "  Scheduler name: $SCHEDULER_NAME-trigger"
+    
+    gcloud scheduler jobs delete "$SCHEDULER_NAME-trigger" `
+        --location=$REGION `
+        --project=$PROJECT_ID `
+        --quiet
+}
+
 # ---- Execution order (fixed, regardless of param order) ----
 if ($ACTIONS -match "i") { push_image }
 if ($ACTIONS -match "r") { replace_job }
 if ($ACTIONS -match "u") { update_job }
 if ($ACTIONS -match "e") { execute_job }
 if ($ACTIONS -match "s") { create_scheduler }
+if ($ACTIONS -match "x") { disable_scheduler }
+if ($ACTIONS -match "d") { delete_scheduler }
 
 Write-Host "Done"
 
